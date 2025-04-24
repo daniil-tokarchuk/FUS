@@ -1,10 +1,13 @@
 import express from 'express';
 import session from 'express-session';
-import { initializeDatabase, shutdown } from './db.js';
-import { checkAuth, handleAuthCallback, getDrive } from './auth.js';
+import { checkAuth, handleAuthCallback } from './auth.js';
+import { initialize, shutdown } from './db.js';
+import { listFiles, uploadFiles } from './handler.js';
 
-initializeDatabase();
+initialize();
 const app = express();
+
+app.use(express.json());
 
 app.use(session({
     secret: process.env.SESSION_SECRET,
@@ -28,19 +31,28 @@ app.get('/', (req, res) => {
 
 app.get('/auth/google/callback', handleAuthCallback);
 
-app.get('/drive/v3/files', async (_, res) => {
+app.get('/get-files', async (_, res) => {
     try {
-        const drive = getDrive();
-        const response = await drive.files.list({ q: "'me' in owners and trashed = false" });
-        res.json(response.data);
+        const files = await listFiles();
+        res.json(files);
     } catch (error) {
         console.error('Drive error:', error);
         res.status(500).send('Drive error. Please try again.');
     }
 });
 
-const server = app.listen(3000, () => {
-    console.log('Server is running on port 3000');
+app.post('/upload-files', async (req, res) => {
+    console.log(req.body);
+    const { urls } = req.body;
+    if (!Array.isArray(urls) || urls.length === 0) {
+        return res.status(400).json({ error: 'Provide an array of URLs' });
+    }
+    const results = await uploadFiles(urls);
+    res.json({ results });
+});
+
+const server = app.listen(process.env.APP_PORT, () => {
+    console.log(`Server is running on port ${process.env.APP_PORT}`);
 });
 
 process.on('SIGTERM', () => {

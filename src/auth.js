@@ -20,11 +20,11 @@ function getAuthUrl() {
     return authUrl;
 }
 
-export function getDrive() {
+function getDrive() {
     return google.drive({ version: 'v3', auth: oauth2Client });
 }
 
-export async function checkAuth(req, res, next) {
+async function checkAuth(req, res, next) {
     const user = req.session.user;
     let authUrl = null;
 
@@ -75,7 +75,7 @@ export async function checkAuth(req, res, next) {
     return next();
 }
 
-export async function handleAuthCallback(req, res) {
+async function handleAuthCallback(req, res) {
     try {
         const { code } = req.query;
         if (!code) {
@@ -111,3 +111,5 @@ export async function handleAuthCallback(req, res) {
         return res.status(500).send('Authentication failed. Please try again.');
     }
 }
+
+export { getDrive, checkAuth, handleAuthCallback };
