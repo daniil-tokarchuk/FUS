@@ -1,0 +1,29 @@
+services:
+  app:
+    image: node:20
+    container_name: app
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - ${APP_PORT}:${APP_PORT}
+    command: /bin/sh -c "npm install && npm run dev"
+    depends_on:
+      - db
+    env_file: .env
+
+  db:
+    image: postgres:15
+    container_name: pg
+    ports:
+      - ${DB_PORT}:${DB_PORT}
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    env_file: .env
+
+volumes:
+  pgdata:
