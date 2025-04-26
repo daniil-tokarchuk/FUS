@@ -5,25 +5,34 @@ import path from 'path';
 import { URL } from 'url';
 import { getDrive } from './auth.js';
 import { saveFile, getFileIds } from './db.js';
+import { drive_v3 } from 'googleapis';
+import { FileData, UploadProgress, UploadResult, FileError } from './models.js';
 
 const MAX_FILE_SIZE = 5120 * 1024 * 1024 * 1024; // 5,120 GB in bytes
 
-const limiter = new Bottleneck({
-    reservoir: 150,
-    reservoirRefreshAmount: 150,
-    reservoirRefreshInterval: 1000,
-    retryDelay: retryCount => Math.min(1000 * 2 ** retryCount, 30000)
-});
-
-limiter.on('failed', async (error, jobInfo) => {
-    if (error && error.statusCode === 429 && jobInfo.retryCount < 5) {
-        console.warn(`429 on job ${jobInfo.options.id}, retry #${jobInfo.retryCount + 1}`);
-        return true;
+const userLimiters = new Map<string, Bottleneck>();
+function getUserLimiter(googleId: string): Bottleneck {
+    if (!userLimiters.has(googleId)) {
+        const limiter = new Bottleneck({
+            reservoir: 150,
+            reservoirRefreshAmount: 150,
+            reservoirRefreshInterval: 1000,
+            retryDelay: (retryCount: number) => Math.min(1000 * 2 ** retryCount, 30000)
+        });
+        // @ts-ignore
+        limiter.on('failed', async (error: Error & { statusCode?: number }, jobInfo: Bottleneck.EventInfoRetryable) => {
+            if (error?.statusCode === 429 && jobInfo.retryCount < 5) {
+                console.warn(`429 on job ${jobInfo.options.id}, retry #${jobInfo.retryCount + 1}`);
+                return true;
+            }
+            return false;
+        });
+        userLimiters.set(googleId, limiter);
     }
-    return false;
-});
+    return userLimiters.get(googleId)!;
+}
 
-async function getFileFromUrl(url, timeout = 30000) {
+async function getFileFromUrl(url: string, timeout = 30000): Promise<FileData> {
     return new Promise((resolve, reject) => {
         const parsed = new URL(url);
         const urlRegex = /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i;
@@ -53,10 +62,11 @@ async function getFileFromUrl(url, timeout = 30000) {
     });
 }
 
-async function uploadFileToDrive({ stream, fileName, fileSize }) {
+async function uploadFileToDrive(googleId: string, { stream, fileName, fileSize }: FileData): Promise<{ data: drive_v3.Schema$File }> {
     const drive = getDrive();
     const mimeType = mime.lookup(fileName) || 'application/octet-stream';
     console.log(`Uploading file ${fileName} with MIME type ${mimeType}`);
+    const limiter = getUserLimiter(googleId);
     return limiter.schedule(() =>
         drive.files.create(
             {
@@ -68,7 +78,7 @@ async function uploadFileToDrive({ stream, fileName, fileSize }) {
                 fields: 'id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime'
             },
             {
-                onUploadProgress: progressEvent => {
+                onUploadProgress: (progressEvent: UploadProgress) => {
                     if (fileSize) {
                         const percentComplete = (progressEvent.bytesRead / fileSize) * 100;
                         console.log(`Uploading ${fileName}: ${percentComplete.toFixed(1)}%`);
@@ -80,53 +90,61 @@ async function uploadFileToDrive({ stream, fileName, fileSize }) {
     );
 }
 
-async function getAllFiles() {
+async function getAllFiles(googleId: string): Promise<drive_v3.Schema$File[]> {
     const drive = getDrive();
-    const response = await drive.files.list({
-        q: "'me' in owners and trashed = false",
-        fields: 'files(id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime)'
-    });
-    return response.data;
+    const limiter = getUserLimiter(googleId);
+    const response = await limiter.schedule(() =>
+        drive.files.list({
+            q: "'me' in owners and trashed = false",
+            fields: 'files(id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime)'
+        })
+    );
+    return response.data.files || [];
 }
 
-async function uploadFiles(googleId, urls) {
+async function uploadFiles(googleId: string, urls: string[]): Promise<UploadResult[]> {
     return Promise.all(
-        urls.map(async url => {
+        urls.map(async (url: string) => {
             try {
                 const fileData = await getFileFromUrl(url);
-                const response = await uploadFileToDrive(fileData);
-                await saveFile(googleId, response.data.id);
+                const response = await uploadFileToDrive(googleId, fileData);
+                await saveFile(googleId, response.data.id!);
                 return {
                     url,
                     status: 'success',
-                    fileId: response.data.id,
-                    fileName: response.data.name
+                    fileId: response.data.id!,
+                    fileName: response.data.name!
                 };
-            } catch (err) {
-                console.error(`Error for ${url}:`, err.message);
-                return { url, status: 'error', error: err.message };
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                console.error(`Error for ${url}:`, errorMessage);
+                return { url, status: 'error', error: errorMessage };
             }
         })
     );
 }
 
-async function getUploadedFiles(googleId) {
+async function getUploadedFiles(googleId: string): Promise<(drive_v3.Schema$File | FileError)[]> {
     const fileIds = await getFileIds(googleId);
     if (!fileIds || fileIds.length === 0) {
         return [];
     }
     const drive = getDrive();
+    const limiter = getUserLimiter(googleId);
     return Promise.all(
         fileIds.map(async ({ file_id }) => {
             try {
-                const response = await drive.files.get({
-                    fileId: file_id,
-                    fields: 'id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime'
-                });
+                const response = await limiter.schedule(() =>
+                    drive.files.get({
+                        fileId: file_id,
+                        fields: 'id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime'
+                    })
+                );
                 return response.data;
             } catch (err) {
-                console.error(`Error getting file ${file_id}:`, err.message);
-                return { id: file_id, error: err.message };
+                const error = err as Error;
+                console.error(`Error getting file ${file_id}:`, error.message);
+                return { id: file_id, error: error.message } as FileError;
             }
         })
     );

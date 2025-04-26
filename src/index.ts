@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 
 app.use(session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || 'development-secret',
     saveUninitialized: false,
     resave: false,
     cookie: {
@@ -36,13 +36,13 @@ app.post('/upload-files', async (req, res) => {
     if (!Array.isArray(urls) || urls.length === 0) {
         return res.status(400).json({ error: 'Provide an array of URLs' });
     }
-    const results = await uploadFiles(req.session.user.googleId, urls);
+    const results = await uploadFiles(req.session.user!.googleId, urls);
     res.json({ results });
 });
 
 app.get('/get-uploaded-files', async (req, res) => {
     try {
-        const files = await getUploadedFiles(req.session.user.googleId);
+        const files = await getUploadedFiles(req.session.user!.googleId);
         res.json({ files });
     } catch (error) {
         console.error('Drive error:', error);
@@ -50,9 +50,9 @@ app.get('/get-uploaded-files', async (req, res) => {
     }
 });
 
-app.get('/get-all-files', async (_, res) => {
+app.get('/get-all-files', async (req, res) => {
     try {
-        const files = await getAllFiles();
+        const files = await getAllFiles(req.session.user!.googleId);
         res.json({ files });
     } catch (error) {
         console.error('Drive error:', error);
