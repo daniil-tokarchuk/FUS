@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { getCredentials, saveCredentials } from './db.js';
+import { saveUser, saveTokens, getCredentials } from './db.js';
 
 const oauth2Client = new google.auth.OAuth2(
     process.env.CLIENT_ID,
@@ -46,7 +46,8 @@ async function checkAuth(req, res, next) {
     if (user.accessToken && user.expiryDate < now) {
         try {
             const { credentials } = await oauth2Client.refreshAccessToken();
-            await saveCredentials(user.googleId, user.email, credentials);
+            await saveUser(user.googleId, user.email);
+            await saveTokens(user.googleId, credentials);
 
             req.session.user = {
                 ...user,
@@ -89,7 +90,8 @@ async function handleAuthCallback(req, res) {
         const userinfo = await oauth2.userinfo.get();
         const { id, email } = userinfo.data;
 
-        await saveCredentials(id, email, tokens);
+        await saveUser(id, email);
+        await saveTokens(id, tokens);
 
         req.session.user = {
             googleId: id,

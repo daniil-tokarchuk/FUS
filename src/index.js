@@ -2,7 +2,7 @@ import express from 'express';
 import session from 'express-session';
 import { checkAuth, handleAuthCallback } from './auth.js';
 import { initialize, shutdown } from './db.js';
-import { listFiles, uploadFiles } from './handler.js';
+import { uploadFiles, getUploadedFiles, getAllFiles } from './handler.js';
 
 initialize();
 const app = express();
@@ -31,24 +31,33 @@ app.get('/', (req, res) => {
 
 app.get('/auth/google/callback', handleAuthCallback);
 
-app.get('/get-files', async (_, res) => {
+app.post('/upload-files', async (req, res) => {
+    const { urls } = req.body;
+    if (!Array.isArray(urls) || urls.length === 0) {
+        return res.status(400).json({ error: 'Provide an array of URLs' });
+    }
+    const results = await uploadFiles(req.session.user.googleId, urls);
+    res.json({ results });
+});
+
+app.get('/get-uploaded-files', async (req, res) => {
     try {
-        const files = await listFiles();
-        res.json(files);
+        const files = await getUploadedFiles(req.session.user.googleId);
+        res.json({ files });
     } catch (error) {
         console.error('Drive error:', error);
         res.status(500).send('Drive error. Please try again.');
     }
 });
 
-app.post('/upload-files', async (req, res) => {
-    console.log(req.body);
-    const { urls } = req.body;
-    if (!Array.isArray(urls) || urls.length === 0) {
-        return res.status(400).json({ error: 'Provide an array of URLs' });
+app.get('/get-all-files', async (_, res) => {
+    try {
+        const files = await getAllFiles();
+        res.json({ files });
+    } catch (error) {
+        console.error('Drive error:', error);
+        res.status(500).send('Drive error. Please try again.');
     }
-    const results = await uploadFiles(urls);
-    res.json({ results });
 });
 
 const server = app.listen(process.env.APP_PORT, () => {

@@ -4,6 +4,7 @@ import mime from 'mime-types';
 import path from 'path';
 import { URL } from 'url';
 import { getDrive } from './auth.js';
+import { saveFile, getFileIds } from './db.js';
 
 const MAX_FILE_SIZE = 5120 * 1024 * 1024 * 1024; // 5,120 GB in bytes
 
@@ -79,7 +80,7 @@ async function uploadFileToDrive({ stream, fileName, fileSize }) {
     );
 }
 
-async function listFiles() {
+async function getAllFiles() {
     const drive = getDrive();
     const response = await drive.files.list({
         q: "'me' in owners and trashed = false",
@@ -88,12 +89,13 @@ async function listFiles() {
     return response.data;
 }
 
-async function uploadFiles(urls) {
+async function uploadFiles(googleId, urls) {
     return Promise.all(
         urls.map(async url => {
             try {
                 const fileData = await getFileFromUrl(url);
                 const response = await uploadFileToDrive(fileData);
+                await saveFile(googleId, response.data.id);
                 return {
                     url,
                     status: 'success',
@@ -108,4 +110,26 @@ async function uploadFiles(urls) {
     );
 }
 
-export { getFileFromUrl, uploadFileToDrive, listFiles, uploadFiles };
+async function getUploadedFiles(googleId) {
+    const fileIds = await getFileIds(googleId);
+    if (!fileIds || fileIds.length === 0) {
+        return [];
+    }
+    const drive = getDrive();
+    return Promise.all(
+        fileIds.map(async ({ file_id }) => {
+            try {
+                const response = await drive.files.get({
+                    fileId: file_id,
+                    fields: 'id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime'
+                });
+                return response.data;
+            } catch (err) {
+                console.error(`Error getting file ${file_id}:`, err.message);
+                return { id: file_id, error: err.message };
+            }
+        })
+    );
+}
+
+export { getFileFromUrl, uploadFileToDrive, getAllFiles, uploadFiles, getUploadedFiles };
