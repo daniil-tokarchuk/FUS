@@ -1,8 +1,8 @@
 import { Pool } from 'pg'
 import { Credentials } from 'google-auth-library'
-import { logger } from './constants.js'
 
-import { User } from './models.js'
+import { logger } from './constants.ts'
+import { User } from './models.ts'
 
 const pool = new Pool({
   user: process.env.DB_USER,
@@ -225,7 +225,13 @@ async function getFileIds(googleId: string): Promise<{ file_id: string }[]> {
 
 async function shutdown(): Promise<void> {
   logger.info('Shutting down database connection pool')
-  await pool.end()
+  try {
+    await pool.end()
+    logger.info('Database connection pool shut down successfully')
+  } catch (error) {
+    logger.error('Error shutting down database connection pool:', error)
+    throw new Error('Failed to shut down database connection pool')
+  }
 }
 
 export {

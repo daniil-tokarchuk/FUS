@@ -1,8 +1,8 @@
 import { google } from 'googleapis'
 import { Request, Response, NextFunction } from 'express'
-import { logger } from './constants.js'
 
-import { saveUser, saveCredentials, getUser, getCredentials } from './db.js'
+import { logger } from './constants.ts'
+import { saveUser, saveCredentials, getUser, getCredentials } from './db.ts'
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.CLIENT_ID,

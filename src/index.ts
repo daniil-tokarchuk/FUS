@@ -1,9 +1,9 @@
 import express from 'express'
 
-import { logger, sessionMiddleware } from './constants.js'
-import { checkAuth, handleAuthCallback } from './auth.js'
-import { initialize, shutdown } from './db.js'
-import { uploadFiles, getUploadedFiles, getAllFiles } from './handler.js'
+import { logger, sessionMiddleware } from './constants.ts'
+import { checkAuth, handleAuthCallback } from './auth.ts'
+import { initialize, shutdown } from './db.ts'
+import { uploadFiles, getUploadedFiles, getAllFiles } from './handler.ts'
 
 initialize()
 logger.info('Database initialized')
@@ -75,22 +75,25 @@ const server = app.listen(process.env.APP_PORT, () => {
   logger.info(`Server is running on port ${process.env.APP_PORT}`)
 })
 
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received: closing HTTP server')
-  server.close(async () => {
+function handleSignal(signal: string): void {
+  logger.info(`${signal} signal received: closing HTTP server`)
+  server.close(async (err) => {
+    if (err) {
+      logger.error('Error closing HTTP server:', err)
+      process.exit(1)
+    }
     logger.info('HTTP server closed')
-    await shutdown()
-    process.exit(0)
+    try {
+      await shutdown()
+      process.exit(0)
+    } catch (error) {
+      logger.error('Error during shutdown:', error)
+      process.exit(1)
+    }
   })
-})
+}
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT signal received: closing HTTP server')
-  server.close(async () => {
-    logger.info('HTTP server closed')
-    await shutdown()
-    process.exit(0)
-  })
-})
+process.on('SIGTERM', () => handleSignal('SIGTERM'))
+process.on('SIGINT', () => handleSignal('SIGINT'))
 
 export default app

@@ -5,14 +5,15 @@ import path from 'path'
 import { URL } from 'url'
 import { drive_v3 } from 'googleapis'
 
-import { FileData, UploadProgress, UploadResult, FileError } from './models.js'
-import { getDrive } from './auth.js'
-import { saveFile, getFileIds } from './db.js'
-import { logger } from './constants.js'
+import { FileData, UploadProgress, UploadResult, FileError } from './models.ts'
+import { getDrive } from './auth.ts'
+import { saveFile, getFileIds } from './db.ts'
+import { logger } from './constants.ts'
 
 const MAX_FILE_SIZE = 5120 * 1024 * 1024 * 1024 // 5,120 GB in bytes
 
 const userLimiters = new Map<string, Bottleneck>()
+
 function getUserLimiter(googleId: string): Bottleneck {
   if (!userLimiters.has(googleId)) {
     const limiter = new Bottleneck({
@@ -183,9 +184,14 @@ async function getUploadedFiles(
         )
         return response.data
       } catch (err) {
-        const error = err as Error
-        logger.error(`Error getting file ${file_id}:`, error.message)
-        return { id: file_id, error: error.message } as FileError
+        const error = err as Error & { code?: number }
+        logger.error(
+          `Error getting file ${file_id}: ${error.message} (code: ${error.code})`,
+        )
+        return {
+          id: file_id,
+          error: error.message || 'Unknown error',
+        } as FileError
       }
     }),
   )
