@@ -1,11 +1,11 @@
-import 'express-session';
-import { Credentials } from 'google-auth-library';
+import 'express-session'
+import { Credentials } from 'google-auth-library'
 
 declare module 'express-session' {
-    interface SessionData {
-        user?: {
-            googleId: string;
-            email: string;
-        } & Credentials;
-    }
-} 
+  interface SessionData {
+    user?: {
+      googleId: string
+      email: string
+    } & Credentials
+  }
+}
