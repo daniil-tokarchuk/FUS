@@ -1,4 +1,6 @@
 import express from 'express'
+import { fileURLToPath } from 'url'
+import path from 'path'
 
 import { logger, sessionMiddleware } from './constants.ts'
 import { checkAuth, handleAuthCallback } from './auth.ts'
@@ -9,6 +11,9 @@ initialize()
 logger.info('Database initialized')
 
 const app = express()
+const API_PATH_V1 = '/api/v1'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 app.use(express.json())
 
@@ -26,47 +31,65 @@ app.use(express.static('public'))
 
 app.get('/', (req, res) => {
   logger.info(`GET / - User: ${req.session.user?.email || 'Guest'}`)
-  res.send(`Welcome ${req.session.user?.email}`)
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'))
+})
+
+app.get('/upload', (req, res) => {
+  logger.info(`GET /upload - User: ${req.session.user?.email || 'Guest'}`)
+  res.sendFile(path.join(__dirname, '..', 'public/upload', 'upload.html'))
+})
+
+app.get('/files', (req, res) => {
+  logger.info(`GET /files - User: ${req.session.user?.email || 'Guest'}`)
+  res.sendFile(path.join(__dirname, '..', 'public/files', 'files.html'))
 })
 
 app.get('/auth/google/callback', handleAuthCallback)
 
-app.post('/upload-files', async (req, res) => {
+app.post(`${API_PATH_V1}/upload-files`, async (req, res) => {
   const { urls } = req.body
   if (!Array.isArray(urls) || urls.length === 0) {
-    logger.warn('POST /upload-files - Invalid request body')
+    logger.warn(`POST ${API_PATH_V1}/upload-files - Invalid request body`)
     return res.status(400).json({ error: 'Provide an array of URLs' })
   }
   try {
     const results = await uploadFiles(req.session.user!.googleId, urls)
     logger.info(
-      `POST /upload-files - Files uploaded by user ${req.session.user!.googleId}`,
+      `POST ${API_PATH_V1}/upload-files - Files uploaded by user ${req.session.user!.googleId}`,
     )
     res.json({ results })
   } catch (error: any) {
-    logger.error(`POST /upload-files - Error: ${error.message}`)
+    logger.error(`POST ${API_PATH_V1}/upload-files - Error: ${error.message}`)
     res.status(500).send('Error uploading files')
   }
 })
 
-app.get('/get-uploaded-files', async (req, res) => {
+app.get(`${API_PATH_V1}/get-uploaded-files`, async (req, res) => {
   try {
     const files = await getUploadedFiles(req.session.user!.googleId)
-    logger.info(`GET /get-uploaded-files - User ${req.session.user!.googleId}`)
+    logger.info(
+      `GET ${API_PATH_V1}/get-uploaded-files - User ${req.session.user!.googleId}`,
+    )
     res.json({ files })
   } catch (error: any) {
-    logger.error(`GET /get-uploaded-files - Drive error: ${error.message}`)
+    logger.error(
+      `GET ${API_PATH_V1}/get-uploaded-files - Drive error: ${error.message}`,
+    )
     res.status(500).send('Drive error. Please try again.')
   }
 })
 
-app.get('/get-all-files', async (req, res) => {
+app.get(`${API_PATH_V1}/get-all-files`, async (req, res) => {
   try {
     const files = await getAllFiles(req.session.user!.googleId)
-    logger.info(`GET /get-all-files - User ${req.session.user!.googleId}`)
+    logger.info(
+      `GET ${API_PATH_V1}/get-all-files - User ${req.session.user!.googleId}`,
+    )
     res.json({ files })
   } catch (error: any) {
-    logger.error(`GET /get-all-files - Drive error: ${error.message}`)
+    logger.error(
+      `GET ${API_PATH_V1}/get-all-files - Drive error: ${error.message}`,
+    )
     res.status(500).send('Drive error. Please try again.')
   }
 })

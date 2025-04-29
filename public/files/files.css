@@ -1,0 +1,37 @@
+:root {
+  --onyx: #454545;
+  --cool-gray: #8c86aa;
+  --white: #ffffff;
+  font-size: 16px;
+  font-family: 'Arial', sans-serif;
+}
+
+body,
+p,
+h1 {
+  margin: 0;
+}
+
+section {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  margin: 5rem auto;
+}
+
+a {
+  color: var(--white);
+}
+
+a:hover {
+  color: var(--cool-gray);
+}
+
+.result {
+  margin: 1rem 0 0 0;
+  padding: 1rem;
+  border-radius: 1rem;
+  width: 60vw;
+  background-color: var(--onyx);
+  color: var(--white);
+}

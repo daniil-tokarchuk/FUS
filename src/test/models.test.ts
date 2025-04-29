@@ -1,6 +1,6 @@
 import { IncomingMessage } from 'http'
 
-import { User, FileData, UploadResult, FileError } from '../models.ts'
+import { User, FileStream, FileUploadResult, FileError } from '../models.ts'
 
 describe('models module', () => {
   it('should validate User interface structure', () => {
@@ -14,7 +14,7 @@ describe('models module', () => {
   })
 
   it('should validate FileData interface structure', () => {
-    const fileData: FileData = {
+    const fileData: FileStream = {
       stream: {} as IncomingMessage,
       fileName: 'example.txt',
       fileSize: 1024,
@@ -25,16 +25,16 @@ describe('models module', () => {
   })
 
   it('should validate UploadResult interface structure', () => {
-    const uploadResult: UploadResult = {
+    const uploadResult: FileUploadResult = {
       url: 'http://example.com/file',
       status: 'success',
-      fileId: 'file123',
-      fileName: 'example.txt',
+      id: 'file123',
+      name: 'example.txt',
     }
 
     expect(uploadResult.url).toBe('http://example.com/file')
     expect(uploadResult.status).toBe('success')
-    expect(uploadResult.fileId).toBe('file123')
+    expect(uploadResult.id).toBe('file123')
   })
 
   it('should validate FileError interface structure', () => {

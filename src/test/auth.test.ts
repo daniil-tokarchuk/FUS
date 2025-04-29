@@ -1,5 +1,6 @@
-import { getAuthUrl, getDrive, checkAuth, handleAuthCallback } from '../auth.ts'
 import { Request, Response, NextFunction } from 'express'
+
+import { getAuthUrl, getDrive, checkAuth, handleAuthCallback } from '../auth.ts'
 
 jest.mock('googleapis', () => ({
   google: {

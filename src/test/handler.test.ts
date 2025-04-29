@@ -17,9 +17,17 @@ jest.mock('../auth', () => ({
       list: jest.fn(() => ({
         data: { files: [{ id: 'mockFileId', name: 'mockFileName' }] },
       })),
-      get: jest.fn(() => ({
-        data: { id: 'mockFileId', name: 'mockFileName' },
-      })),
+      get: jest.fn(() =>
+        Promise.resolve({
+          data: {
+            id: 'mockFileId',
+            name: 'mockFileName',
+            size: '1.00 B',
+            createdTime: '2023-01-01 02:00:00',
+            modifiedTime: '2023-01-02 02:00:00',
+          },
+        }),
+      ),
     },
   })),
 }))
@@ -88,21 +96,32 @@ describe('handler module', () => {
       {
         url: 'https://example.com/mockfile1.txt',
         status: 'success',
-        fileId: 'mockFileId',
-        fileName: 'mockFileName',
+        name: 'mockFileName',
+        mimeType: undefined,
+        size: 'Unknown',
+        webViewLink: undefined,
       },
       {
         url: 'https://example.com/mockfile2.txt',
         status: 'success',
-        fileId: 'mockFileId',
-        fileName: 'mockFileName',
+        name: 'mockFileName',
+        mimeType: undefined,
+        size: 'Unknown',
+        webViewLink: undefined,
       },
     ])
   })
 
   it('should get uploaded files', async () => {
     const files = await getUploadedFiles('mockGoogleId')
-    expect(files).toEqual([{ id: 'mockFileId', name: 'mockFileName' }])
+    expect(files).toEqual([
+      {
+        id: 'mockFileId',
+        name: 'mockFileName',
+        size: '1.00 B',
+        createdTime: '2023-01-01 02:00:00',
+        modifiedTime: '2023-01-02 02:00:00',
+      },
+    ])
   })
 })
-

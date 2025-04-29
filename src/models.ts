@@ -1,12 +1,11 @@
 import { IncomingMessage } from 'http'
-import { drive_v3 } from 'googleapis'
 
 interface User {
   googleId: string
   email: string
 }
 
-interface FileData {
+interface FileStream {
   stream: IncomingMessage
   fileName: string
   fileSize: number | null
@@ -16,16 +15,32 @@ interface UploadProgress {
   bytesRead: number
 }
 
-interface UploadResult {
+interface FileData {
+  id?: string | null
+  name?: string | null
+  mimeType?: string | null
+  size?: string | number | null
+  webViewLink?: string | null
+  webContentLink?: string | null
+  createdTime?: string | null
+  modifiedTime?: string | null
+}
+
+interface FileUploadResult extends FileData {
   url: string
   status: 'success' | 'error'
-  fileId?: string
-  fileName?: string
   error?: string
 }
 
-interface FileError extends drive_v3.Schema$File {
+interface FileError extends FileData {
   error: string
 }
 
-export type { User, FileData, UploadProgress, UploadResult, FileError }
+export type {
+  User,
+  FileStream,
+  UploadProgress,
+  FileData,
+  FileUploadResult,
+  FileError,
+}

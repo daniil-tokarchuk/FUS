@@ -1,0 +1,86 @@
+:root {
+  --onyx: #454545;
+  --cool-gray: #8c86aa;
+  --crayola: #b1b5c8;
+  --vermilion: #ff3333;
+  --white: #ffffff;
+  font-size: 16px;
+  font-family: 'Arial', sans-serif !important;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 90vw;
+  margin: 5rem auto;
+}
+
+input {
+  border: 0.15rem solid var(--onyx);
+  border-radius: 1rem;
+  padding: 0.5rem;
+  width: 60vw;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--cool-gray);
+}
+
+input:disabled {
+  background-color: var(--crayola);
+  cursor: not-allowed;
+}
+
+button {
+  background-color: var(--onyx);
+  color: white;
+  padding: 0.5rem 2rem;
+  border-radius: 1rem;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+button:hover {
+  background-color: var(--cool-gray);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--white);
+}
+
+a:hover {
+  color: var(--cool-gray);
+}
+
+.input-element {
+  margin-bottom: 1rem;
+}
+
+.input-button {
+  margin-left: 1rem;
+}
+
+.invalid {
+  border-color: var(--vermilion);
+}
+
+.result {
+  margin: 1rem 0 0 0;
+  padding: 1rem;
+  border-radius: 1rem;
+  width: 60vw;
+  background-color: var(--onyx);
+  color: var(--white);
+}
