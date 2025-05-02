@@ -1,0 +1,51 @@
+version: '3'
+
+services:
+  app:
+    image: 847809320477.dkr.ecr.us-east-1.amazonaws.com/app:latest
+    ports:
+      - ${HTTP_PORT}:${HTTP_PORT}
+      - ${HTTPS_PORT}:${HTTPS_PORT}
+    environment:
+      - HTTP_PORT=${HTTP_PORT}
+      - HTTPS_PORT=${HTTPS_PORT}
+      - CERTS_PATH=${CERTS_PATH}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - COOKIE_MAX_AGE=${COOKIE_MAX_AGE}
+      - LOG_FILE_PATH=${LOG_FILE_PATH}
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - REDIRECT_URI=${REDIRECT_URI}
+    links:
+      - pg-db
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: default
+        awslogs-region: us-east-1
+        awslogs-stream-prefix: app
+
+  pg-db:
+    image: postgres:15
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: pg-db
+    volumes:
+      - pg-db-data:/var/lib/postgresql/data
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: default
+        awslogs-region: us-east-1
+        awslogs-stream-prefix: pg-db
+
+volumes:
+  pg-db-data:

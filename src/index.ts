@@ -1,6 +1,9 @@
 import express from 'express'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import https from 'https'
+import http from 'http'
+import fs from 'fs'
 
 import { logger, sessionMiddleware } from './constants.ts'
 import { checkAuth, handleAuthCallback } from './auth.ts'
@@ -94,29 +97,62 @@ app.get(`${API_PATH_V1}/get-all-files`, async (req, res) => {
   }
 })
 
-const server = app.listen(process.env.APP_PORT, () => {
-  logger.info(`Server is running on port ${process.env.APP_PORT}`)
-})
+const options = {
+  key: fs.readFileSync(`${process.env.CERTS_PATH}/privkey.pem`),
+  cert: fs.readFileSync(`${process.env.CERTS_PATH}/fullchain.pem`),
+}
+
+const httpsServer = https
+  .createServer(options, app)
+  .listen(process.env.HTTPS_PORT, () => {
+    console.log(`HTTPS server running on port ${process.env.HTTPS_PORT}`)
+  })
+
+const httpServer = http
+  .createServer((req, res) => {
+    const host = req.headers.host?.replace(/:\d+$/, '')
+    res.writeHead(301, { Location: `https://${host}${req.url}` })
+    res.end()
+  })
+  .listen(process.env.HTTP_PORT, () => {
+    console.log(`HTTP redirect server running on port ${process.env.HTTP_PORT}`)
+  })
 
 function handleSignal(signal: string): void {
-  logger.info(`${signal} signal received: closing HTTP server`)
-  server.close(async (err) => {
-    if (err) {
-      logger.error('Error closing HTTP server:', err)
+  logger.info(`${signal} signal received: closing servers`)
+
+  const closeServer = (server: http.Server, name: string) => {
+    return new Promise<void>((resolve, reject) => {
+      server.close((err) => {
+        if (err) {
+          logger.error(`Error closing ${name} server:`, err)
+          return reject(err)
+        }
+        logger.info(`${name} server closed`)
+        resolve()
+      })
+    })
+  }
+
+  Promise.all([
+    closeServer(httpServer, 'HTTP'),
+    closeServer(httpsServer, 'HTTPS'),
+  ])
+    .then(async () => {
+      try {
+        await shutdown()
+        logger.info('Application shutdown complete')
+        process.exit(0)
+      } catch (error) {
+        logger.error('Error during shutdown:', error)
+        process.exit(1)
+      }
+    })
+    .catch((error) => {
+      logger.error('Error closing servers:', error)
       process.exit(1)
-    }
-    logger.info('HTTP server closed')
-    try {
-      await shutdown()
-      process.exit(0)
-    } catch (error) {
-      logger.error('Error during shutdown:', error)
-      process.exit(1)
-    }
-  })
+    })
 }
 
 process.on('SIGTERM', () => handleSignal('SIGTERM'))
 process.on('SIGINT', () => handleSignal('SIGINT'))
-
-export default app

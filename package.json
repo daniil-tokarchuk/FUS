@@ -33,12 +33,14 @@
   "scripts": {
     "clean": "rimraf dist coverage",
     "build": "node esbuild.config.mjs",
-    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
     "dev": "node esbuild.config.mjs && node --env-file .env dist/index.js",
     "clean:dev": "npm run clean && npm run dev",
     "test": "jest",
     "clean:test": "npm run clean && npm run test",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
-    "update": "npm update && npm dedupe"
+    "update": "npm update && npm dedupe",
+    "chores": "npm run clean && npm run update && npm run format && npm run typecheck && npm run test"
   }
 }

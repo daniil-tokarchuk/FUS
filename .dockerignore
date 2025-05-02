@@ -1,2 +1,8 @@
-node_modules
-npm-debug.log
+.DS_Store
+
+.idea/
+.vscode/
+logs/
+dist/
+coverage/
+node_modules/

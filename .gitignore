@@ -1,7 +1,9 @@
 .DS_Store
-.idea
-.vscode
-node_modules
-dist
-coverage
-logs
+
+.idea/
+.vscode/
+logs/
+dist/
+certs/
+coverage/
+node_modules/

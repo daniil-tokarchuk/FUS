@@ -3,18 +3,18 @@ services:
     image: node:20
     container_name: app
     working_dir: /app
+    command: /bin/sh -c "npm install && npm run update && npm run dev"
+    ports:
+      - ${HTTP_PORT}:${HTTP_PORT}
+      - ${HTTPS_PORT}:${HTTPS_PORT}
+    depends_on:
+      - pg-db
     volumes:
       - .:/app
-    ports:
-      - ${APP_PORT}:${APP_PORT}
-    command: /bin/sh -c "npm install && npm run dev"
-    depends_on:
-      - db
-    env_file: .env
 
-  db:
+  pg-db:
     image: postgres:15
-    container_name: pg
+    container_name: pg-db
     ports:
       - ${DB_PORT}:${DB_PORT}
     environment:
@@ -22,8 +22,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    env_file: .env
+      - pg-db-data:/var/lib/postgresql/data
 
 volumes:
-  pgdata:
+  pg-db-data:
