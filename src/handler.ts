@@ -4,6 +4,8 @@ import mime from 'mime-types'
 import path from 'path'
 import { URL } from 'url'
 import { format as formatDate } from 'date-fns'
+import { StatusCodes } from 'http-status-codes'
+import { drive_v3 } from 'googleapis'
 
 import {
   FileStream,
@@ -12,9 +14,9 @@ import {
   FileError,
   FileData,
 } from './models.ts'
-import { getDrive } from './auth.ts'
 import { saveFile, getFileIds } from './db.ts'
 import { logger } from './constants.ts'
+import { getDriveAPI } from './auth.ts'
 
 const MAX_FILE_SIZE = 5120 * 1024 * 1024 * 1024 // 5,120 GB in bytes
 const FIELDS = [
@@ -37,7 +39,7 @@ function getUserLimiter(googleId: string): Bottleneck {
       reservoirRefreshAmount: 150,
       reservoirRefreshInterval: 1000,
       retryDelay: (retryCount: number) =>
-        Math.min(1000 * 2 ** retryCount, 30000),
+        Math.min(1000 * 2 ** retryCount, 30_000),
     })
     limiter.on(
       'failed',
@@ -45,7 +47,10 @@ function getUserLimiter(googleId: string): Bottleneck {
         error: Error & { statusCode?: number },
         jobInfo: Bottleneck.EventInfoRetryable,
       ) => {
-        if (error?.statusCode === 429 && jobInfo.retryCount < 5) {
+        if (
+          error?.statusCode === StatusCodes.TOO_MANY_REQUESTS &&
+          jobInfo.retryCount < 5
+        ) {
           logger.warn(
             `429 on job ${jobInfo.options.id}, retry #${jobInfo.retryCount + 1}`,
           )
@@ -59,9 +64,9 @@ function getUserLimiter(googleId: string): Bottleneck {
   return userLimiters.get(googleId)!
 }
 
-async function getFileFromUrl(
+export async function getFileFromUrl(
   url: string,
-  timeout = 30000,
+  timeout = 30_000,
 ): Promise<FileStream> {
   logger.info(`Fetching file from URL: ${url}`)
   return new Promise((resolve, reject) => {
@@ -78,7 +83,7 @@ async function getFileFromUrl(
     const fileName =
       path.basename(parsedUrl.pathname) || `unknown_${Date.now()}`
     const req = https.get(url, (res) => {
-      if (res.statusCode !== 200) {
+      if (res.statusCode !== StatusCodes.OK) {
         reject(new Error(`Download failed: ${res.statusCode}`))
         return
       }
@@ -107,15 +112,13 @@ async function getFileFromUrl(
   })
 }
 
-async function uploadFileToDrive(
-  googleId: string,
+export async function uploadFileToDrive(
+  drive: drive_v3.Drive,
+  limiter: Bottleneck,
   { stream, fileName, fileSize }: FileStream,
 ): Promise<{ data: FileData }> {
-  logger.info(`Uploading file ${fileName} for user ${googleId}`)
-  const drive = getDrive()
   const mimeType = mime.lookup(fileName) || 'application/octet-stream'
   logger.info(`Uploading file ${fileName} with MIME type ${mimeType}`)
-  const limiter = getUserLimiter(googleId)
   return limiter.schedule(() =>
     drive.files.create(
       {
@@ -130,7 +133,9 @@ async function uploadFileToDrive(
         onUploadProgress: (progressEvent: UploadProgress) => {
           if (fileSize) {
             const percentComplete = (progressEvent.bytesRead / fileSize) * 100
-            // logger.info(`Uploading ${fileName}: ${percentComplete.toFixed(1)}%`)
+            logger.debug(
+              `Uploading ${fileName}: ${percentComplete.toFixed(1)}%`,
+            )
             if (percentComplete >= 100)
               logger.info(`${fileName} upload complete!`)
           }
@@ -140,8 +145,9 @@ async function uploadFileToDrive(
   )
 }
 
-async function getAllFiles(googleId: string): Promise<FileData[]> {
-  const drive = getDrive()
+export async function getAllFiles(googleId: string): Promise<FileData[]> {
+  logger.info(`Fetching all files, Google ID: ${googleId}`)
+  const drive = getDriveAPI(googleId)
   const limiter = getUserLimiter(googleId)
   const response = await limiter.schedule(() =>
     drive.files.list({
@@ -152,19 +158,21 @@ async function getAllFiles(googleId: string): Promise<FileData[]> {
   return response.data.files || []
 }
 
-async function uploadFiles(
+export async function uploadFiles(
   googleId: string,
   urls: string[],
 ): Promise<FileUploadResult[]> {
-  logger.info(`Uploading multiple files for user ${googleId}`)
+  logger.info(`Uploading multiple files, Google ID: ${googleId}`)
+  const drive = getDriveAPI(googleId)
+  const limiter = getUserLimiter(googleId)
   return Promise.all(
     urls.map(async (url: string) => {
       try {
         const fileData = await getFileFromUrl(url)
-        const response = await uploadFileToDrive(googleId, fileData)
+        const response = await uploadFileToDrive(drive, limiter, fileData)
         await saveFile(googleId, response.data.id!)
         logger.info(
-          `File ${response.data.name} uploaded successfully for user ${googleId}`,
+          `File ${response.data.name} uploaded successfully, Google ID: ${googleId}`,
         )
         return {
           url,
@@ -187,15 +195,15 @@ async function uploadFiles(
   )
 }
 
-async function getUploadedFiles(
+export async function getUploadedFiles(
   googleId: string,
 ): Promise<(FileData | FileError)[]> {
-  logger.info(`Fetching uploaded files for user ${googleId}`)
+  logger.info(`Fetching uploaded files, Google ID: ${googleId}`)
   const fileIds = await getFileIds(googleId)
   if (!fileIds || fileIds.length === 0) {
     return []
   }
-  const drive = getDrive()
+  const drive = getDriveAPI(googleId)
   const limiter = getUserLimiter(googleId)
   return Promise.all(
     fileIds.map(async ({ file_id }) => {
@@ -207,7 +215,7 @@ async function getUploadedFiles(
               fields: FIELDS,
             })
             .catch((error) => {
-              if (error.code === 404) {
+              if (error.code === StatusCodes.NOT_FOUND) {
                 throw new Error(
                   `File with ID ${file_id} not found on Google Drive`,
                 )
@@ -216,16 +224,17 @@ async function getUploadedFiles(
             }),
         )
         const file = response.data
+        const DATE_FORMAT = 'yyyy-MM-dd HH:mm:ss'
         return {
           ...file,
           size: file.size ? formatFileSize(parseInt(file.size, 10)) : 'Unknown',
           createdTime:
             file.createdTime ?
-              formatDate(new Date(file.createdTime), 'yyyy-MM-dd HH:mm:ss')
+              formatDate(new Date(file.createdTime), DATE_FORMAT)
             : 'Unknown',
           modifiedTime:
             file.modifiedTime ?
-              formatDate(new Date(file.modifiedTime), 'yyyy-MM-dd HH:mm:ss')
+              formatDate(new Date(file.modifiedTime), DATE_FORMAT)
             : 'Unknown',
         }
       } catch (err) {
@@ -242,7 +251,7 @@ async function getUploadedFiles(
   )
 }
 
-function formatFileSize(bytes: number): string {
+export function formatFileSize(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let index = 0
   while (bytes >= 1024 && index < units.length - 1) {
@@ -250,12 +259,4 @@ function formatFileSize(bytes: number): string {
     index++
   }
   return `${bytes.toFixed(2)} ${units[index]}`
-}
-
-export {
-  getFileFromUrl,
-  uploadFileToDrive,
-  getAllFiles,
-  uploadFiles,
-  getUploadedFiles,
 }

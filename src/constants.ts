@@ -1,6 +1,9 @@
 import winston from 'winston'
 import session from 'express-session'
 
+export const API_PATH_V1 = '/api/v1'
+export const GOOGLE_OAUTH_CALLBACK_URL = '/auth/google/callback'
+
 export const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(

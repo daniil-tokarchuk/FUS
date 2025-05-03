@@ -4,17 +4,22 @@ import path from 'path'
 import https from 'https'
 import http from 'http'
 import fs from 'fs'
+import StatusCodes from 'http-status-codes'
 
-import { logger, sessionMiddleware } from './constants.ts'
+import {
+  API_PATH_V1,
+  GOOGLE_OAUTH_CALLBACK_URL,
+  logger,
+  sessionMiddleware,
+} from './constants.ts'
 import { checkAuth, handleAuthCallback } from './auth.ts'
-import { initialize, shutdown } from './db.ts'
+import { initDB, shutdown } from './db.ts'
 import { uploadFiles, getUploadedFiles, getAllFiles } from './handler.ts'
 
-initialize()
+await initDB()
 logger.info('Database initialized')
 
 const app = express()
-const API_PATH_V1 = '/api/v1'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -24,7 +29,7 @@ app.use(sessionMiddleware)
 
 app.use((req, res, next) => {
   logger.info(`Incoming request: ${req.method} ${req.path}`)
-  if (req.path === '/auth/google/callback') {
+  if (req.path === GOOGLE_OAUTH_CALLBACK_URL) {
     return next()
   }
   return checkAuth(req, res, next)
@@ -33,77 +38,91 @@ app.use((req, res, next) => {
 app.use(express.static('public'))
 
 app.get('/', (req, res) => {
-  logger.info(`GET / - User: ${req.session.user?.email || 'Guest'}`)
+  logger.info(`GET / - User: ${req.session.user!.googleId}`)
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'))
 })
 
 app.get('/upload', (req, res) => {
-  logger.info(`GET /upload - User: ${req.session.user?.email || 'Guest'}`)
+  logger.info(`GET /upload - User: ${req.session.user!.googleId}`)
   res.sendFile(path.join(__dirname, '..', 'public/upload', 'upload.html'))
 })
 
 app.get('/files', (req, res) => {
-  logger.info(`GET /files - User: ${req.session.user?.email || 'Guest'}`)
+  logger.info(`GET /files - User: ${req.session.user!.googleId}`)
   res.sendFile(path.join(__dirname, '..', 'public/files', 'files.html'))
 })
 
-app.get('/auth/google/callback', handleAuthCallback)
+app.get(GOOGLE_OAUTH_CALLBACK_URL, handleAuthCallback)
 
 app.post(`${API_PATH_V1}/upload-files`, async (req, res) => {
   const { urls } = req.body
   if (!Array.isArray(urls) || urls.length === 0) {
     logger.warn(`POST ${API_PATH_V1}/upload-files - Invalid request body`)
-    return res.status(400).json({ error: 'Provide an array of URLs' })
+    return res
+      .status(StatusCodes.BAD_REQUEST)
+      .json({ error: 'Provide an array of URLs' })
   }
+  let results
   try {
-    const results = await uploadFiles(req.session.user!.googleId, urls)
-    logger.info(
-      `POST ${API_PATH_V1}/upload-files - Files uploaded by user ${req.session.user!.googleId}`,
-    )
-    res.json({ results })
+    results = await uploadFiles(req.session.user!.googleId, urls)
   } catch (error: any) {
     logger.error(`POST ${API_PATH_V1}/upload-files - Error: ${error.message}`)
-    res.status(500).send('Error uploading files')
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).send('Error uploading files')
   }
+  logger.info(
+    `POST ${API_PATH_V1}/upload-files - Files uploaded by user ${req.session.user!.googleId}`,
+  )
+  res.json({ results })
 })
 
 app.get(`${API_PATH_V1}/get-uploaded-files`, async (req, res) => {
+  let files
   try {
-    const files = await getUploadedFiles(req.session.user!.googleId)
-    logger.info(
-      `GET ${API_PATH_V1}/get-uploaded-files - User ${req.session.user!.googleId}`,
-    )
-    res.json({ files })
+    files = await getUploadedFiles(req.session.user!.googleId)
   } catch (error: any) {
     logger.error(
       `GET ${API_PATH_V1}/get-uploaded-files - Drive error: ${error.message}`,
     )
-    res.status(500).send('Drive error. Please try again.')
+    res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .send('Drive error. Please try again.')
   }
+  logger.info(
+    `GET ${API_PATH_V1}/get-uploaded-files - User ${req.session.user!.googleId}`,
+  )
+  res.json({ files })
 })
 
 app.get(`${API_PATH_V1}/get-all-files`, async (req, res) => {
+  let files
   try {
-    const files = await getAllFiles(req.session.user!.googleId)
-    logger.info(
-      `GET ${API_PATH_V1}/get-all-files - User ${req.session.user!.googleId}`,
-    )
-    res.json({ files })
+    files = await getAllFiles(req.session.user!.googleId)
   } catch (error: any) {
     logger.error(
       `GET ${API_PATH_V1}/get-all-files - Drive error: ${error.message}`,
     )
-    res.status(500).send('Drive error. Please try again.')
+    res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .send('Drive error. Please try again.')
   }
+  logger.info(
+    `GET ${API_PATH_V1}/get-all-files - User ${req.session.user!.googleId}`,
+  )
+  res.json({ files })
 })
 
-const options = {
-  key: fs.readFileSync(`${process.env.CERTS_PATH}/privkey.pem`),
-  cert: fs.readFileSync(`${process.env.CERTS_PATH}/fullchain.pem`),
-}
-
 const httpsServer = https
-  .createServer(options, app)
+  .createServer(
+    {
+      key: fs.readFileSync(
+        `${process.env.NODE_ENV === 'dev' ? path.join(__dirname, process.env.DEV_CERTS_PATH || '../certs') : process.env.CERTS_PATH}/privkey.pem`,
+      ),
+      cert: fs.readFileSync(
+        `${process.env.NODE_ENV === 'dev' ? path.join(__dirname, process.env.DEV_CERTS_PATH || '../certs') : process.env.CERTS_PATH}/fullchain.pem`,
+      ),
+    },
+    app,
+  )
   .listen(process.env.HTTPS_PORT, () => {
     console.log(`HTTPS server running on port ${process.env.HTTPS_PORT}`)
   })
@@ -111,7 +130,9 @@ const httpsServer = https
 const httpServer = http
   .createServer((req, res) => {
     const host = req.headers.host?.replace(/:\d+$/, '')
-    res.writeHead(301, { Location: `https://${host}${req.url}` })
+    res.writeHead(StatusCodes.MOVED_PERMANENTLY, {
+      Location: `https://${host}${req.url}`,
+    })
     res.end()
   })
   .listen(process.env.HTTP_PORT, () => {
@@ -141,12 +162,12 @@ function handleSignal(signal: string): void {
     .then(async () => {
       try {
         await shutdown()
-        logger.info('Application shutdown complete')
-        process.exit(0)
       } catch (error) {
         logger.error('Error during shutdown:', error)
         process.exit(1)
       }
+      logger.info('Application shutdown complete')
+      process.exit(0)
     })
     .catch((error) => {
       logger.error('Error closing servers:', error)

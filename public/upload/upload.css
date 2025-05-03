@@ -8,7 +8,9 @@
   font-family: 'Arial', sans-serif !important;
 }
 
-body, h2, p {
+body,
+h2,
+p {
   margin: 0;
 }
 
@@ -54,6 +56,7 @@ button:hover {
 
 a {
   color: var(--white);
+  word-wrap: break-word;
 }
 
 a:hover {
@@ -61,7 +64,7 @@ a:hover {
 }
 
 .input-container {
-    margin-top: 1rem;
+  margin-top: 1rem;
 }
 
 .input-element {
@@ -83,6 +86,7 @@ a:hover {
   padding: 1rem;
   border-radius: 1rem;
   width: 60vw;
+  word-wrap: break-word;
   background-color: var(--onyx);
   color: var(--white);
 }

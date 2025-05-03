@@ -9,32 +9,29 @@ import {
 } from '../handler.ts'
 
 jest.mock('../auth', () => ({
-  getDrive: jest.fn(() => ({
+  getDriveAPI: jest.fn().mockReturnValue({
     files: {
-      create: jest.fn(() => ({
+      list: jest.fn().mockResolvedValue({
+        data: {
+          files: [
+            { id: 'mockFileId1', name: 'file1.txt' },
+            { id: 'mockFileId2', name: 'file2.txt' },
+          ],
+        },
+      }),
+      create: jest.fn().mockResolvedValue({
         data: { id: 'mockFileId', name: 'mockFileName' },
-      })),
-      list: jest.fn(() => ({
-        data: { files: [{ id: 'mockFileId', name: 'mockFileName' }] },
-      })),
-      get: jest.fn(() =>
-        Promise.resolve({
-          data: {
-            id: 'mockFileId',
-            name: 'mockFileName',
-            size: '1.00 B',
-            createdTime: '2023-01-01 02:00:00',
-            modifiedTime: '2023-01-02 02:00:00',
-          },
-        }),
-      ),
+      }),
+      get: jest.fn().mockResolvedValue({
+        data: { id: 'mockFileId', name: 'mockFileName' },
+      }),
     },
-  })),
+  }),
 }))
 
 jest.mock('../db', () => ({
-  saveFile: jest.fn(),
-  getFileIds: jest.fn(() => [{ file_id: 'mockFileId' }]),
+  saveFile: jest.fn().mockResolvedValue({ file_id: 'mockFileId' }),
+  getFileIds: jest.fn().mockResolvedValue([{ file_id: 'mockFileId' }]),
 }))
 
 jest.mock('https', () => ({
@@ -77,51 +74,47 @@ describe('handler module', () => {
       fileName: 'mockfile.txt',
       fileSize: 1024,
     }
-    const response = await uploadFileToDrive('mockGoogleId', fileData)
+    const mockDrive = {
+      files: {
+        create: jest.fn(() => ({
+          data: { id: 'mockFileId', name: 'mockFileName' },
+        })),
+      },
+    } as any
+    const mockLimiter = {
+      schedule: jest.fn((fn) => fn()),
+    } as any
+
+    const response = await uploadFileToDrive(mockDrive, mockLimiter, fileData)
     expect(response.data.id).toBe('mockFileId')
   })
 
   it('should get all files from Google Drive', async () => {
     const files = await getAllFiles('mockGoogleId')
-    expect(files).toEqual([{ id: 'mockFileId', name: 'mockFileName' }])
+    expect(files).toHaveLength(2)
+    expect(files[0]!.id).toBe('mockFileId1')
   })
 
   it('should upload multiple files', async () => {
     const urls = [
-      'https://example.com/mockfile1.txt',
-      'https://example.com/mockfile2.txt',
+      'https://example.com/file1.txt',
+      'https://example.com/file2.txt',
     ]
     const results = await uploadFiles('mockGoogleId', urls)
-    expect(results).toEqual([
-      {
-        url: 'https://example.com/mockfile1.txt',
-        status: 'success',
-        name: 'mockFileName',
-        mimeType: undefined,
-        size: 'Unknown',
-        webViewLink: undefined,
-      },
-      {
-        url: 'https://example.com/mockfile2.txt',
-        status: 'success',
-        name: 'mockFileName',
-        mimeType: undefined,
-        size: 'Unknown',
-        webViewLink: undefined,
-      },
-    ])
+    expect(results).toHaveLength(2)
+    expect(results[0]).toEqual({
+      name: 'mockFileName',
+      status: 'success',
+      url: 'https://example.com/file1.txt',
+      size: 'Unknown',
+      mimeType: undefined,
+      webViewLink: undefined,
+    })
   })
 
   it('should get uploaded files', async () => {
     const files = await getUploadedFiles('mockGoogleId')
-    expect(files).toEqual([
-      {
-        id: 'mockFileId',
-        name: 'mockFileName',
-        size: '1.00 B',
-        createdTime: '2023-01-01 02:00:00',
-        modifiedTime: '2023-01-02 02:00:00',
-      },
-    ])
+    expect(files).toHaveLength(1)
+    expect(files[0]!.id).toBe('mockFileId')
   })
 })

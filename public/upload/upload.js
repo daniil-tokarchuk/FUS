@@ -23,7 +23,7 @@ function createButton(text, input) {
 
 function toggleInput(input, button) {
   const buttonType = button.textContent
-  if ((buttonType === 'Add' || buttonType === 'Done') && isValidInput(input)) {
+  if (['Add', 'Done'].includes(buttonType) && isValidInput(input)) {
     input.disabled = true
     button.textContent = 'Edit'
     if (buttonType === 'Add') {
@@ -68,7 +68,9 @@ function upload() {
     .then((response) => response.json())
     .then(({ results }) => displayResults(results))
     .catch(() => alert('Upload failed.'))
-    .finally(() => (this.disabled = false))
+    .finally(() => {
+      this.disabled = false
+    })
 }
 
 function displayResults(results) {

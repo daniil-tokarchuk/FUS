@@ -1,21 +1,21 @@
 import { IncomingMessage } from 'http'
 
-interface User {
+export interface User {
   googleId: string
   email: string
 }
 
-interface FileStream {
+export interface FileStream {
   stream: IncomingMessage
   fileName: string
   fileSize: number | null
 }
 
-interface UploadProgress {
+export interface UploadProgress {
   bytesRead: number
 }
 
-interface FileData {
+export interface FileData {
   id?: string | null
   name?: string | null
   mimeType?: string | null
@@ -26,21 +26,12 @@ interface FileData {
   modifiedTime?: string | null
 }
 
-interface FileUploadResult extends FileData {
+export interface FileUploadResult extends FileData {
   url: string
   status: 'success' | 'error'
   error?: string
 }
 
-interface FileError extends FileData {
+export interface FileError extends FileData {
   error: string
-}
-
-export type {
-  User,
-  FileStream,
-  UploadProgress,
-  FileData,
-  FileUploadResult,
-  FileError,
 }

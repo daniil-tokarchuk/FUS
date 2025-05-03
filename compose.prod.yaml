@@ -7,6 +7,7 @@ services:
       - ${HTTP_PORT}:${HTTP_PORT}
       - ${HTTPS_PORT}:${HTTPS_PORT}
     environment:
+      - NODE_ENV=prod
       - HTTP_PORT=${HTTP_PORT}
       - HTTPS_PORT=${HTTPS_PORT}
       - CERTS_PATH=${CERTS_PATH}

@@ -10,11 +10,11 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 2_000,
 })
 
-async function initialize(): Promise<void> {
+export async function initDB(): Promise<void> {
   logger.info('Initializing database')
   const client = await pool.connect()
   try {
@@ -54,7 +54,7 @@ async function initialize(): Promise<void> {
   }
 }
 
-async function saveUser(googleId: string, email: string): Promise<void> {
+export async function saveUser(googleId: string, email: string): Promise<void> {
   logger.info(`Saving user ${googleId} (${email}) to database`)
   const client = await pool.connect()
   try {
@@ -81,7 +81,7 @@ async function saveUser(googleId: string, email: string): Promise<void> {
   }
 }
 
-async function saveCredentials(
+export async function saveCredentials(
   googleId: string,
   credentials: Credentials,
 ): Promise<void> {
@@ -128,7 +128,7 @@ async function saveCredentials(
   }
 }
 
-async function getUser(googleId: string): Promise<User | null> {
+export async function getUser(googleId: string): Promise<User | null> {
   logger.info(`Fetching user ${googleId} from database`)
   const client = await pool.connect()
   try {
@@ -149,7 +149,9 @@ async function getUser(googleId: string): Promise<User | null> {
   }
 }
 
-async function getCredentials(googleId: string): Promise<Credentials | null> {
+export async function getCredentials(
+  googleId: string,
+): Promise<Credentials | null> {
   logger.info(`Fetching credentials for user ${googleId}`)
   const client = await pool.connect()
   try {
@@ -173,7 +175,10 @@ async function getCredentials(googleId: string): Promise<Credentials | null> {
   }
 }
 
-async function saveFile(googleId: string, fileId: string): Promise<void> {
+export async function saveFile(
+  googleId: string,
+  fileId: string,
+): Promise<void> {
   logger.info(`Saving file ${fileId} for user ${googleId}`)
   const client = await pool.connect()
   try {
@@ -199,7 +204,9 @@ async function saveFile(googleId: string, fileId: string): Promise<void> {
   }
 }
 
-async function getFileIds(googleId: string): Promise<{ file_id: string }[]> {
+export async function getFileIds(
+  googleId: string,
+): Promise<{ file_id: string }[]> {
   logger.info(`Fetching file IDs for user ${googleId}`)
   const client = await pool.connect()
   try {
@@ -223,7 +230,7 @@ async function getFileIds(googleId: string): Promise<{ file_id: string }[]> {
   }
 }
 
-async function shutdown(): Promise<void> {
+export async function shutdown(): Promise<void> {
   logger.info('Shutting down database connection pool')
   try {
     await pool.end()
@@ -232,15 +239,4 @@ async function shutdown(): Promise<void> {
     logger.error('Error shutting down database connection pool:', error)
     throw new Error('Failed to shut down database connection pool')
   }
-}
-
-export {
-  initialize,
-  saveUser,
-  saveCredentials,
-  getUser,
-  getCredentials,
-  saveFile,
-  getFileIds,
-  shutdown,
 }

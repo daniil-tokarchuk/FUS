@@ -1,33 +1,21 @@
 import { google } from 'googleapis'
 import { Request, Response, NextFunction } from 'express'
+import { StatusCodes } from 'http-status-codes'
+import { Credentials, OAuth2Client } from 'google-auth-library'
 
 import { logger } from './constants.ts'
-import { saveUser, saveCredentials, getUser, getCredentials } from './db.ts'
+import { saveUser, saveCredentials, getCredentials } from './db.ts'
 
-const oauth2Client = new google.auth.OAuth2(
+const clients = new Map<string, OAuth2Client>()
+const OAUTH2_CLIENT = new google.auth.OAuth2(
   process.env.CLIENT_ID,
   process.env.CLIENT_SECRET,
-  process.env.REDIRECT_URI,
+  process.env.NODE_ENV === 'dev' ?
+    process.env.DEV_REDIRECT_URI
+  : process.env.REDIRECT_URI,
 )
 
-function getAuthUrl(needsRefreshToken: boolean = false): string {
-  const authUrl = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    ...(needsRefreshToken ? { prompt: 'consent' } : {}),
-    scope: [
-      'https://www.googleapis.com/auth/drive',
-      'https://www.googleapis.com/auth/userinfo.email',
-    ],
-  })
-  logger.info(`Generated auth URL: ${authUrl}`)
-  return authUrl
-}
-
-function getDrive() {
-  return google.drive({ version: 'v3', auth: oauth2Client })
-}
-
-async function checkAuth(
+export async function checkAuth(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -40,104 +28,161 @@ async function checkAuth(
     return res.redirect(getAuthUrl(true))
   }
 
-  const now = Date.now()
-
-  if (sessionUser.access_token && sessionUser.expiry_date) {
-    if (sessionUser.expiry_date >= now) {
-      oauth2Client.setCredentials({
-        access_token: sessionUser.access_token,
-        refresh_token: sessionUser.refresh_token || '',
-        expiry_date: sessionUser.expiry_date,
-      })
-      return next()
-    }
-
-    if (sessionUser.refresh_token) {
-      try {
-        const { credentials } = await oauth2Client.refreshAccessToken()
-        await saveCredentials(sessionUser.googleId, credentials)
-
-        req.session.user = {
-          ...sessionUser,
-          access_token: credentials.access_token || '',
-          refresh_token: credentials.refresh_token || sessionUser.refresh_token,
-          expiry_date: credentials.expiry_date || Date.now() + 3_600_000,
-        }
-
-        oauth2Client.setCredentials(credentials)
-        return next()
-      } catch (error) {
-        logger.error('Error refreshing credentials:', error)
-        return res.redirect(getAuthUrl(true))
-      }
-    }
+  if (sessionUser.expiry_date && Date.now() <= sessionUser.expiry_date) {
+    return next()
   }
 
-  const user = await getUser(sessionUser.googleId)
-  const credentials = await getCredentials(sessionUser.googleId)
+  let client = getOAuth2Client(sessionUser.googleId)
+  if (!client) {
+    logger.warn(`No client in clients map, Google ID: ${sessionUser.googleId}`)
+    logger.info(
+      `Fetching credentials from database, Google ID: ${sessionUser.googleId}`,
+    )
+    const credentials = await getCredentials(sessionUser.googleId)
+    if (!credentials) {
+      logger.warn(
+        `No credentials found in database, redirecting to auth URL, Google ID: ${sessionUser.googleId}`,
+      )
+      return res.redirect(getAuthUrl(true))
+    }
+    client = createOAuth2Client(credentials)
+  }
 
-  if (!user || !credentials) {
+  let tokenResponse
+  try {
+    tokenResponse = await client.refreshAccessToken()
+  } catch (error) {
+    logger.error(
+      `Error refreshing access token, Google ID: ${sessionUser.googleId}`,
+      error,
+    )
     return res.redirect(getAuthUrl(true))
   }
+  const { credentials } = tokenResponse
 
-  const needsRefreshToken = !credentials.refresh_token
-  if (needsRefreshToken) {
-    return res.redirect(getAuthUrl(true))
+  client.setCredentials({
+    refresh_token: client.credentials.refresh_token!,
+    ...credentials,
+  })
+
+  clients.set(sessionUser.googleId, client)
+  await saveCredentials(sessionUser.googleId, credentials)
+
+  req.session.user = {
+    ...sessionUser,
+    ...credentials,
   }
 
-  oauth2Client.setCredentials(credentials)
-  req.session.user = { ...user, ...credentials }
-  return next()
+  req.session.save((error) => {
+    if (error) {
+      logger.error('Session save error:', error)
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).send('Session error')
+    }
+    return next()
+  })
 }
 
-async function handleAuthCallback(
+export async function handleAuthCallback(
   req: Request,
   res: Response,
 ): Promise<Response | void> {
-  logger.info('Handling auth callback')
-  try {
-    const { code } = req.query
-    if (!code || typeof code !== 'string') {
-      return res.status(400).send('Authorization code is required')
-    }
-
-    const { tokens } = await oauth2Client.getToken(code)
-    oauth2Client.setCredentials(tokens)
-
-    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
-    const userinfo = await oauth2.userinfo.get()
-    const { id, email } = userinfo.data
-
-    if (!id || !email) {
-      const error = new Error('Missing user info')
-      logger.error(error)
-      throw error
-    }
-
-    logger.info(`User authenticated: ${id} (${email})`)
-
-    await saveUser(id, email)
-    await saveCredentials(id, tokens)
-
-    req.session.user = {
-      googleId: id,
-      email,
-      access_token: tokens.access_token || '',
-      refresh_token: tokens.refresh_token || '',
-      expiry_date: tokens.expiry_date || Date.now() + 3_600_000,
-    }
-
-    req.session.save((err: Error | null) => {
-      if (err) {
-        logger.error('Session save error:', err)
-        return res.status(500).send('Session error')
-      }
-      res.redirect('/')
-    })
-  } catch (error) {
-    logger.error('Auth callback error:', error)
-    return res.status(500).send('Authentication failed. Please try again.')
+  logger.info('Received google auth callback')
+  const { code } = req.query
+  if (!code) {
+    logger.error('No authorization code provided')
+    return res
+      .status(StatusCodes.BAD_REQUEST)
+      .send('Authorization code is required')
   }
+
+  let tokenResponse
+  try {
+    tokenResponse = await OAUTH2_CLIENT.getToken(<string>code)
+  } catch (error) {
+    logger.error(`Cannot get tokens for code: ${code}`, error)
+    return res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .send('Authentication failed. Please try again.')
+  }
+
+  const client = createOAuth2Client(tokenResponse.tokens)
+  const userApi = google.oauth2({ version: 'v2', auth: client })
+  let userInfo
+  try {
+    userInfo = await userApi.userinfo.get()
+  } catch (error) {
+    logger.error('Error fetching user info:', error)
+    return res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .send('Authentication failed. Please try again.')
+  }
+
+  const { id: googleId, email } = userInfo.data
+  if (!googleId || !email) {
+    logger.error('No Google ID or email found in user info')
+    return res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .send('Authentication failed. Please try again.')
+  }
+  logger.info(`User authenticated: ${googleId} (${email})`)
+
+  clients.set(googleId, client)
+
+  await saveUser(googleId, email)
+  await saveCredentials(googleId, client.credentials)
+
+  req.session.user = {
+    googleId,
+    email,
+    ...client.credentials,
+  }
+
+  req.session.save((error) => {
+    if (error) {
+      logger.error('Session save error:', error)
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).send('Session error')
+    }
+    res.redirect('/')
+  })
 }
 
-export { getAuthUrl, getDrive, checkAuth, handleAuthCallback }
+export function getDriveAPI(googleId: string) {
+  const client = getOAuth2Client(googleId)
+  if (!client) {
+    logger.error(`No OAuth2 client found, Google ID: ${googleId}`)
+    throw new Error('No OAuth2 client found')
+  }
+  return google.drive({ version: 'v3', auth: client })
+}
+
+function getAuthUrl(consent: boolean = false): string {
+  const authUrl = OAUTH2_CLIENT.generateAuthUrl({
+    access_type: 'offline',
+    ...(consent ? { prompt: 'consent' } : {}),
+    scope: [
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/userinfo.email',
+    ],
+  })
+  logger.info(`Generated auth URL: ${authUrl}`)
+  return authUrl
+}
+
+function createOAuth2Client(credentials: Credentials): OAuth2Client {
+  const client = new google.auth.OAuth2(
+    process.env.CLIENT_ID,
+    process.env.CLIENT_SECRET,
+    process.env.NODE_ENV === 'dev' ?
+      process.env.DEV_REDIRECT_URI
+    : process.env.REDIRECT_URI,
+  )
+  client.setCredentials(credentials)
+  return client
+}
+
+function getOAuth2Client(googleId: string): OAuth2Client | null {
+  if (clients.has(googleId)) {
+    return clients.get(googleId)!
+  }
+  return null
+}

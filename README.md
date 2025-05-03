@@ -12,10 +12,11 @@
 
 ## About
 
-This is a file upload service that allows users to upload files to Google Drive. The service is built using Node.js and
-TypeScript, providing a robust and scalable solution for file management.
+This file upload service allows users to upload files to Google Drive. The service is built using Node.js and
+TypeScript provides a robust and scalable solution for file management.
 
 ## Project Structure
+
 ```
 .
 ├── README.md          <-- This instructions file
@@ -36,21 +37,21 @@ TypeScript, providing a robust and scalable solution for file management.
 
 ## Prerequisites
 
-* [NodeJS 20.X installed](https://nodejs.org/en/download/releases/)
-* [npm installed](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
-* [Docker installed](https://docs.docker.com/get-started/get-docker/)
+- [NodeJS 20.X installed](https://nodejs.org/en/download/releases/)
+- [npm installed](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
+- [Docker installed](https://docs.docker.com/get-started/get-docker/)
 
 ## Dependency Installation
 
-* Run `npm install` to install all dependencies listed in the package.json
+- Run `npm install` to install all dependencies listed in the package.json
 
 ## Project Commands
 
-- `npm run dev` - Build and run project in development mode
-- `npm run test` - Run unit tests
-- `npm run typecheck` - Check TypeScript types
-- `npm run format` - Format code using Prettier
-- `docker compose up` - Build and run project in development mode using Docker
+- `npm run dev` - Build and run the project in development mode.
+- `npm run test` - Run unit tests.
+- `npm run typecheck` - Check TypeScript types.
+- `npm run format` - Format code using Prettier.
+- `docker compose up` - Build and run the project in development mode using Docker.
 
 ## API Documentation
 
@@ -58,21 +59,21 @@ TypeScript, providing a robust and scalable solution for file management.
 
 #### `POST /api/v1/upload-files`
 
-- **Description**: Upload given array of files to google drive.
+- **Description**: Upload the given array of files to Google Drive.
 - **Request body**:
   ```json
   {
     "urls": [
-        "https://example.com/document.docx",
-        "https://example.com/file.pdf",
-        "https://example.com/photo.jpg"
+      "https://example.com/document.docx",
+      "https://example.com/file.pdf",
+      "https://example.com/photo.jpg"
     ]
   }
   ```
 
 #### `GET /api/v1/get-uploaded-files`
 
-- **Description**: Get uploaded files from google drive.
+- **Description**: Get uploaded files from Google Drive.
 - **Response**:
   ```json
   {
@@ -103,7 +104,7 @@ TypeScript, providing a robust and scalable solution for file management.
 
 #### `GET /api/v1/get-all-files`
 
-- **Description**: Get all files which owned by user and not trashed from google drive.
+- **Description**: Get all files owned by the user and not trashed from Google Drive.
 - **Response**:
   ```json
   {
@@ -134,15 +135,23 @@ TypeScript, providing a robust and scalable solution for file management.
 
 ## System Design
 
-- Front-end on native HTML/CSS/JS, framework can be used
-- AWS free tier used for deployment, t2.micro instance used - 1vCPU, 1GB RAM, 30GB Volume
-- Google Cloud free tier allows only 12,000 requests per minute
+- The front end is on native HTML/CSS/JS, and a framework can be used.
+- AWS free tier is used for deployment (t2.micro instance) - 1 vCPU, 1GB RAM, 30GB volume.
+- Google Cloud free tier allows only 12,000 requests per minute.
+- Google API does not allow upload file size greater than 5,120 GB.
 
 ## Known Issues
 
-- No code analysis tool, should be replaced with ESLint or similar
-- No ORM - plain SQL, pool management, hard to maintain/extend, should be replaced with Prisma or similar
-- Memory caching - not suitable for production, should be replaced with Redis or similar
-- No Proxy - sites can block requests from app eventually
-- Cannot automatically renew SSL certificates, because DNS used doesn’t have API for that.
+- No code analysis tool, ESLint or similar, should be added.
+- No ORM - plain SQL, pool management, hard to maintain/extend, should be replaced with Prisma or similar.
+- In-memory store - not suitable for production, should be replaced with Redis or similar.
+- No proxy sites can block requests from the app eventually.
+- Cannot automatically renew SSL certificates, because the DNS used doesn’t have an API for that.
 - Google Cloud verification required.
+- Environment variables are not securely stored.
+- Database volume is not persistent, should use RDS instead of container.
+- Not fully optimized for mobile.
+
+## Deployment Documentation
+
+- [Deployment Documentation](https://tokarchuk.notion.site/Deployment-1e5eab1c603e80429bb1f65c169f3b67?pvs=4)
